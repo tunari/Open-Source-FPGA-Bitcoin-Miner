@@ -53,7 +53,7 @@ module fpgaminer_top (osc_clk);
 
 	//// 
 	reg [255:0] state = 0;
-	reg [511:0] data = 0;
+	reg [127:0] data = 0;
 	reg [31:0] nonce = 32'h00000000;
 
 
@@ -71,15 +71,15 @@ module fpgaminer_top (osc_clk);
 	reg [5:0] cnt = 6'd0;
 	reg feedback = 1'b0;
 
-	sha256_transform #(.LOOP(LOOP)) uut (
+	sha256_transform #(.LOOP(LOOP), .NUM_ROUNDS(64)) uut (
 		.clk(hash_clk),
 		.feedback(feedback),
 		.cnt(cnt),
 		.rx_state(state),
-		.rx_input(data),
+		.rx_input({384'h000002800000000000000000000000000000000000000000000000000000000000000000000000000000000080000000, data}),
 		.tx_hash(hash)
 	);
-	sha256_transform #(.LOOP(LOOP)) uut2 (
+	sha256_transform #(.LOOP(LOOP), .NUM_ROUNDS(LOOP == 1 ? 61 : 64)) uut2 (
 		.clk(hash_clk),
 		.feedback(feedback),
 		.cnt(cnt),
@@ -104,7 +104,7 @@ module fpgaminer_top (osc_clk);
 	
 	`ifndef SIM
 		virtual_wire # (.PROBE_WIDTH(32), .WIDTH(0), .INSTANCE_ID("GNON")) golden_nonce_vw_blk (.probe(golden_nonce), .source());
-		virtual_wire # (.PROBE_WIDTH(32), .WIDTH(0), .INSTANCE_ID("NONC")) nonce_vw_blk (.probe(nonce), .source());
+		//virtual_wire # (.PROBE_WIDTH(32), .WIDTH(0), .INSTANCE_ID("NONC")) nonce_vw_blk (.probe(nonce), .source());
 	`endif
 
 
@@ -148,17 +148,20 @@ module fpgaminer_top (osc_clk);
 
 		// Give new data to the hasher
 		state <= midstate_buf;
-		data <= {384'h000002800000000000000000000000000000000000000000000000000000000000000000000000000000000080000000, nonce_next, data_buf[95:0]};
+		data <= {nonce_next, data_buf[95:0]};
 		nonce <= nonce_next;
 
 
 		// Check to see if the last hash generated is valid.
-		is_golden_ticket <= (hash2[255:224] == 32'h00000000) && !feedback_d1;
+		if(LOOP == 1)
+			is_golden_ticket <= (hash2[159:128] + 32'h5be0cd19 == 32'h00000000);
+		else
+			is_golden_ticket <= (hash2[255:224] == 32'h00000000) && !feedback_d1;
 		if(is_golden_ticket)
 		begin
 			// TODO: Find a more compact calculation for this
 			if (LOOP == 1)
-				golden_nonce <= nonce - 32'd131;
+				golden_nonce <= nonce - 32'd128;
 			else if (LOOP == 2)
 				golden_nonce <= nonce - 32'd66;
 			else
