@@ -79,7 +79,7 @@ module fpgaminer_top (osc_clk);
 		.rx_input({384'h000002800000000000000000000000000000000000000000000000000000000000000000000000000000000080000000, data}),
 		.tx_hash(hash)
 	);
-	sha256_transform #(.LOOP(LOOP), .NUM_ROUNDS(LOOP == 1 ? 61 : 64)) uut2 (
+	sha256_transform #(.LOOP(LOOP), .NUM_ROUNDS(LOOP == 1 ? 61 : (LOOP == 2 ? 62 : 64))) uut2 (
 		.clk(hash_clk),
 		.feedback(feedback),
 		.cnt(cnt),
@@ -155,6 +155,8 @@ module fpgaminer_top (osc_clk);
 		// Check to see if the last hash generated is valid.
 		if(LOOP == 1)
 			is_golden_ticket <= (hash2[159:128] + 32'h5be0cd19 == 32'h00000000);
+		else if(LOOP == 2)
+			is_golden_ticket <= (hash2[191:160] + 32'h5be0cd19 == 32'h00000000);
 		else
 			is_golden_ticket <= (hash2[255:224] == 32'h00000000) && !feedback_d1;
 		if(is_golden_ticket)
@@ -163,7 +165,7 @@ module fpgaminer_top (osc_clk);
 			if (LOOP == 1)
 				golden_nonce <= nonce - 32'd128;
 			else if (LOOP == 2)
-				golden_nonce <= nonce - 32'd66;
+				golden_nonce <= nonce - 32'd65;
 			else
 				golden_nonce <= nonce - GOLDEN_NONCE_OFFSET;
 		end
