@@ -156,7 +156,7 @@ module fpgaminer_top (osc_clk);
 		if(LOOP == 1)
 			is_golden_ticket <= (hash2[159:128] + 32'h5be0cd19 == 32'h00000000);
 		else if(LOOP == 2)
-			is_golden_ticket <= (hash2[191:160] + 32'h5be0cd19 == 32'h00000000);
+			is_golden_ticket <= (hash2[191:160] + 32'h5be0cd19 == 32'h00000000) && !feedback_d1;
 		else
 			is_golden_ticket <= (hash2[255:224] == 32'h00000000) && !feedback_d1;
 		if(is_golden_ticket)
