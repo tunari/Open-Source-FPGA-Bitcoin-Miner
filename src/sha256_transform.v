@@ -92,7 +92,7 @@ module sha256_transform #(
 	generate
 
 		for (i = 0; i < NUM_ROUNDS/LOOP; i = i + 1) begin : HASHERS
-			wire [511:0] W;
+			wire [31:0] new_w15;
 			wire [255:0] state;
 			wire [31:0] K;
 `ifdef USE_RAM_FOR_KS
@@ -100,24 +100,60 @@ module sha256_transform #(
 `else
 			assign K = Ks[32*(63-LOOP*i-cnt) +: 32];
 `endif
+			wire [31:0] cur_w0;
+			if(i == 0)
+				assign cur_w0 = rx_input[31:0];
+			else
+				shifter_32b #(.LENGTH(1)) shift_w0 (clk, HASHERS[i-1].cur_w1, cur_w0);
+				
+			wire[31:0] cur_w1;
+			if(i == 0)
+				assign cur_w1 = rx_input[63:32];
+			else if(i < 8)
+				shifter_32b #(.LENGTH(i)) shift_w1 (clk, rx_input[`IDX(1+i)], cur_w1);
+			else
+				shifter_32b #(.LENGTH(8)) shift_w1 (clk, HASHERS[i-8].cur_w9, cur_w1);
+				
+
+			wire [31:0] cur_w14;
+			if(i == 0)
+				assign cur_w14 = rx_input[479:448];
+			else if(i == 1)
+				shifter_32b #(.LENGTH(1)) shift_w14 (clk, rx_input[511:480], cur_w14);
+			else
+				shifter_32b #(.LENGTH(1)) shift_w14 (clk, HASHERS[i-2].new_w15, cur_w14);
+				
+			wire [31:0] cur_w9;
+			if(i == 0)
+				assign cur_w9 = rx_input[319:288];
+			else if(i < 5)
+				shifter_32b #(.LENGTH(i)) shift_w9 (clk, rx_input[`IDX(9+i)], cur_w9);
+			else
+				shifter_32b #(.LENGTH(5)) shift_w9 (clk, HASHERS[i-5].cur_w14, cur_w9);
 
 			if(i == 0)
 				sha256_digester U (
 					.clk(clk),
 					.k(K),
-					.rx_w(feedback ? W : rx_input),
 					.rx_state(feedback ? state : rx_state),
-					.tx_w(W),
-					.tx_state(state)
+					.rx_w0(cur_w0),
+					.rx_w1(cur_w1),
+					.rx_w9(cur_w9),
+					.rx_w14(cur_w14),
+					.tx_state(state),
+					.tx_w15(new_w15)
 				);
 			else
 				sha256_digester U (
 					.clk(clk),
 					.k(K),
-					.rx_w(feedback ? W : HASHERS[i-1].W),
 					.rx_state(feedback ? state : HASHERS[i-1].state),
-					.tx_w(W),
-					.tx_state(state)
+					.rx_w0(cur_w0),
+					.rx_w1(cur_w1),
+					.rx_w9(cur_w9),
+					.rx_w14(cur_w14),
+					.tx_state(state),
+					.tx_w15(new_w15)
 				);
 		end
 
@@ -153,36 +189,36 @@ module sha256_transform #(
 endmodule
 
 
-module sha256_digester (clk, k, rx_w, rx_state, tx_w, tx_state);
+module sha256_digester (clk, k, rx_state, rx_w0, rx_w1, rx_w9, rx_w14,
+								tx_state, tx_w15);
 
 	input clk;
 	input [31:0] k;
-	input [511:0] rx_w;
 	input [255:0] rx_state;
+	input [31:0] rx_w0, rx_w1, rx_w9, rx_w14;
 
-	output reg [511:0] tx_w;
 	output reg [255:0] tx_state;
+	output reg[31:0] tx_w15;
 
 
 	wire [31:0] e0_w, e1_w, ch_w, maj_w, s0_w, s1_w;
-
-
+	
+	
 	e0	e0_blk	(rx_state[`IDX(0)], e0_w);
 	e1	e1_blk	(rx_state[`IDX(4)], e1_w);
 	ch	ch_blk	(rx_state[`IDX(4)], rx_state[`IDX(5)], rx_state[`IDX(6)], ch_w);
 	maj	maj_blk	(rx_state[`IDX(0)], rx_state[`IDX(1)], rx_state[`IDX(2)], maj_w);
-	s0	s0_blk	(rx_w[63:32], s0_w);
-	s1	s1_blk	(rx_w[479:448], s1_w);
+	s0	s0_blk	(rx_w1, s0_w);
+	s1	s1_blk	(rx_w14, s1_w);
 
-	wire [31:0] t1 = rx_state[`IDX(7)] + e1_w + ch_w + rx_w[31:0] + k;
+	wire [31:0] t1 = (rx_state[`IDX(7)]+ rx_w0 + k) + e1_w + ch_w ;
 	wire [31:0] t2 = e0_w + maj_w;
-	wire [31:0] new_w = s1_w + rx_w[319:288] + s0_w + rx_w[31:0];
+	wire [31:0] new_w = s1_w + rx_w9 + s0_w + rx_w0;
 	
 
 	always @ (posedge clk)
 	begin
-		tx_w[511:480] <= new_w;
-		tx_w[479:0] <= rx_w[511:32];
+		tx_w15 <= new_w;
 
 		tx_state[`IDX(7)] <= rx_state[`IDX(6)];
 		tx_state[`IDX(6)] <= rx_state[`IDX(5)];
@@ -196,5 +232,27 @@ module sha256_digester (clk, k, rx_w, rx_state, tx_w, tx_state);
 
 endmodule
 
+module shifter_32b #(
+	parameter LENGTH = 1
+) (
+	input clk,
+	input [31:0] val_in,
+	output [31:0] val_out
+);
+	genvar i;
 
-
+	generate
+		for (i = 0; i < LENGTH; i = i + 1) begin : TAPS
+			reg [31:0] r;
+			wire [31:0] prev; 
+				if(i == 0)
+					assign prev = val_in;
+				else
+					assign prev = TAPS[i-1].r;
+			always @ (posedge clk)
+				r <= prev;
+		end
+	endgenerate
+	
+	assign val_out = TAPS[LENGTH-1].r;
+endmodule
