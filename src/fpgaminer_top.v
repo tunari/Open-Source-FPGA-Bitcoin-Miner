@@ -53,7 +53,7 @@ module fpgaminer_top (osc_clk);
 
 	//// 
 	reg [255:0] state = 0;
-	reg [511:0] data = 0;
+	reg [127:0] data = 0;
 	reg [31:0] nonce = 32'h00000000;
 
 
@@ -76,7 +76,7 @@ module fpgaminer_top (osc_clk);
 		.feedback(feedback),
 		.cnt(cnt),
 		.rx_state(state),
-		.rx_input(data),
+		.rx_input({384'h000002800000000000000000000000000000000000000000000000000000000000000000000000000000000080000000, data}),
 		.tx_hash(hash)
 	);
 	sha256_transform #(.LOOP(LOOP)) uut2 (
@@ -148,7 +148,7 @@ module fpgaminer_top (osc_clk);
 
 		// Give new data to the hasher
 		state <= midstate_buf;
-		data <= {384'h000002800000000000000000000000000000000000000000000000000000000000000000000000000000000080000000, nonce_next, data_buf[95:0]};
+		data <= {nonce_next, data_buf[95:0]};
 		nonce <= nonce_next;
 
 
