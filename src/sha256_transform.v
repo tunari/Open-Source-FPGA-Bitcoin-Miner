@@ -36,7 +36,8 @@
 // 2 implies a half-unrolled loop, with 32 round modules and calculating
 // a full hash in 2 clock cycles. And so forth.
 module sha256_transform #(
-	parameter LOOP = 6'd4
+	parameter LOOP = 6'd4,
+	parameter NUM_ROUNDS = 64
 ) (
 	input clk,
 	input feedback,
@@ -70,7 +71,7 @@ module sha256_transform #(
 
 	generate
 
-		for (i = 0; i < 64/LOOP; i = i + 1) begin : HASHERS
+		for (i = 0; i < NUM_ROUNDS/LOOP; i = i + 1) begin : HASHERS
 			wire [511:0] W;
 			wire [255:0] state;
 
@@ -100,14 +101,25 @@ module sha256_transform #(
 	begin
 		if (!feedback)
 		begin
-			tx_hash[`IDX(0)] <= rx_state[`IDX(0)] + HASHERS[64/LOOP-6'd1].state[`IDX(0)];
-			tx_hash[`IDX(1)] <= rx_state[`IDX(1)] + HASHERS[64/LOOP-6'd1].state[`IDX(1)];
-			tx_hash[`IDX(2)] <= rx_state[`IDX(2)] + HASHERS[64/LOOP-6'd1].state[`IDX(2)];
-			tx_hash[`IDX(3)] <= rx_state[`IDX(3)] + HASHERS[64/LOOP-6'd1].state[`IDX(3)];
-			tx_hash[`IDX(4)] <= rx_state[`IDX(4)] + HASHERS[64/LOOP-6'd1].state[`IDX(4)];
-			tx_hash[`IDX(5)] <= rx_state[`IDX(5)] + HASHERS[64/LOOP-6'd1].state[`IDX(5)];
-			tx_hash[`IDX(6)] <= rx_state[`IDX(6)] + HASHERS[64/LOOP-6'd1].state[`IDX(6)];
-			tx_hash[`IDX(7)] <= rx_state[`IDX(7)] + HASHERS[64/LOOP-6'd1].state[`IDX(7)];
+			if (NUM_ROUNDS == 64) begin
+				tx_hash[`IDX(0)] <= rx_state[`IDX(0)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(0)];
+				tx_hash[`IDX(1)] <= rx_state[`IDX(1)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(1)];
+				tx_hash[`IDX(2)] <= rx_state[`IDX(2)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(2)];
+				tx_hash[`IDX(3)] <= rx_state[`IDX(3)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(3)];
+				tx_hash[`IDX(4)] <= rx_state[`IDX(4)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(4)];
+				tx_hash[`IDX(5)] <= rx_state[`IDX(5)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(5)];
+				tx_hash[`IDX(6)] <= rx_state[`IDX(6)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(6)];
+				tx_hash[`IDX(7)] <= rx_state[`IDX(7)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(7)];
+			end else begin
+				tx_hash[`IDX(0)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(0)];
+				tx_hash[`IDX(1)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(1)];
+				tx_hash[`IDX(2)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(2)];
+				tx_hash[`IDX(3)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(3)];
+				tx_hash[`IDX(4)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(4)];
+				tx_hash[`IDX(5)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(5)];
+				tx_hash[`IDX(6)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(6)];
+				tx_hash[`IDX(7)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(7)];
+			end
 		end
 	end
 
