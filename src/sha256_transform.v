@@ -19,6 +19,17 @@
 * 
 */
 
+// Tweakable options. You can enable these in the project settings.
+
+// We can implement K[s] as memory (read-only RAM).
+// This is mostly useful on Xilinx ISE's xst synthesis tool, which interprets
+// the other way of implementing K[s] very strangely and inefficiently.
+// Note that this still doesn't allow block RAM to be used!
+
+//`define USE_RAM_FOR_KS
+
+// End of options.
+
 
 `timescale 1ns/1ps
 
@@ -68,17 +79,32 @@ module sha256_transform #(
 
 
 	genvar i;
+		
+`ifdef USE_RAM_FOR_KS
+	wire [31:0] Ks_mem[0:63];
+	generate
+		for (i = 0; i < 64; i = i + 1) begin : KS_RAM_INIT
+			assign Ks_mem[i] = Ks[32*(63-i) +: 32];
+		end
+	endgenerate
+`endif
 
 	generate
 
 		for (i = 0; i < NUM_ROUNDS/LOOP; i = i + 1) begin : HASHERS
 			wire [511:0] W;
 			wire [255:0] state;
+			wire [31:0] K;
+`ifdef USE_RAM_FOR_KS
+			assign K = Ks_mem[LOOP*i+cnt];
+`else
+			assign K = Ks[32*(63-LOOP*i-cnt) +: 32];
+`endif
 
 			if(i == 0)
 				sha256_digester U (
 					.clk(clk),
-					.k(Ks[32*(63-cnt) +: 32]),
+					.k(K),
 					.rx_w(feedback ? W : rx_input),
 					.rx_state(feedback ? state : rx_state),
 					.tx_w(W),
@@ -87,7 +113,7 @@ module sha256_transform #(
 			else
 				sha256_digester U (
 					.clk(clk),
-					.k(Ks[32*(63-LOOP*i-cnt) +: 32]),
+					.k(K),
 					.rx_w(feedback ? W : HASHERS[i-1].W),
 					.rx_state(feedback ? state : HASHERS[i-1].state),
 					.tx_w(W),
