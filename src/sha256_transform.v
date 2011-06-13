@@ -1,6 +1,7 @@
 /*
 *
 * Copyright (c) 2011 fpgaminer@bitcoin-mining.com
+* Copyright (c) 2011 Aidan Thornton <makosoft@gmail.com>
 *
 *
 *
@@ -27,6 +28,13 @@
 // Note that this still doesn't allow block RAM to be used!
 
 //`define USE_RAM_FOR_KS
+
+// On Altera FPGAs, we can use the altshift_taps macro to store W in
+// RAM-based shift registers. Alternatively, the optimiser can do this
+// for you instead if it's behaving itself properly, but that won't
+// save quite as many FPGA registers as doing it explicitly would.
+
+//`define USE_EXPLICIT_ALTSHIFT_FOR_W
 
 // End of options.
 
@@ -242,6 +250,13 @@ module shifter_32b #(
 	genvar i;
 
 	generate
+`ifdef USE_EXPLICIT_ALTSHIFT_FOR_W
+	if(LENGTH >= 4) begin
+		altshift_taps #(.number_of_taps(1), .tap_distance(LENGTH), .width(32)) shifttaps
+		( .clken(1), .aclr(0), .clock(clk), .shiftin(val_in), .taps(), .shiftout(val_out) ); 
+	end else begin
+`endif
+
 		for (i = 0; i < LENGTH; i = i + 1) begin : TAPS
 			reg [31:0] r;
 			wire [31:0] prev; 
@@ -252,7 +267,10 @@ module shifter_32b #(
 			always @ (posedge clk)
 				r <= prev;
 		end
-	endgenerate
 	
 	assign val_out = TAPS[LENGTH-1].r;
+`ifdef USE_EXPLICIT_ALTSHIFT_FOR_W
+	end
+`endif
+	endgenerate
 endmodule
