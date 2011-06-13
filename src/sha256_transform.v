@@ -108,36 +108,53 @@ module sha256_transform #(
 `else
 			assign K = Ks[32*(63-LOOP*i-cnt) +: 32];
 `endif
-			wire [31:0] cur_w0;
-			if(i == 0)
-				assign cur_w0 = rx_input[31:0];
-			else
-				shifter_32b #(.LENGTH(1)) shift_w0 (clk, HASHERS[i-1].cur_w1, cur_w0);
+			wire [31:0] cur_w0, cur_w1, cur_w9, cur_w14;
+			reg [479:0] new_w14to0;
+			if(LOOP == 1)
+			begin
+				if(i == 0)
+					assign cur_w0 = rx_input[31:0];
+				else
+					shifter_32b #(.LENGTH(1)) shift_w0 (clk, HASHERS[i-1].cur_w1, cur_w0);
 				
-			wire[31:0] cur_w1;
-			if(i == 0)
-				assign cur_w1 = rx_input[63:32];
-			else if(i < 8)
-				shifter_32b #(.LENGTH(i)) shift_w1 (clk, rx_input[`IDX(1+i)], cur_w1);
-			else
-				shifter_32b #(.LENGTH(8)) shift_w1 (clk, HASHERS[i-8].cur_w9, cur_w1);
+				if(i == 0)
+					assign cur_w1 = rx_input[63:32];
+				else if(i < 8)
+					shifter_32b #(.LENGTH(i)) shift_w1 (clk, rx_input[`IDX(1+i)], cur_w1);
+				else
+					shifter_32b #(.LENGTH(8)) shift_w1 (clk, HASHERS[i-8].cur_w9, cur_w1);
 				
-
-			wire [31:0] cur_w14;
-			if(i == 0)
-				assign cur_w14 = rx_input[479:448];
-			else if(i == 1)
-				shifter_32b #(.LENGTH(1)) shift_w14 (clk, rx_input[511:480], cur_w14);
-			else
-				shifter_32b #(.LENGTH(1)) shift_w14 (clk, HASHERS[i-2].new_w15, cur_w14);
 				
-			wire [31:0] cur_w9;
-			if(i == 0)
-				assign cur_w9 = rx_input[319:288];
-			else if(i < 5)
-				shifter_32b #(.LENGTH(i)) shift_w9 (clk, rx_input[`IDX(9+i)], cur_w9);
-			else
-				shifter_32b #(.LENGTH(5)) shift_w9 (clk, HASHERS[i-5].cur_w14, cur_w9);
+				if(i == 0)
+					assign cur_w14 = rx_input[479:448];
+				else if(i == 1)
+					shifter_32b #(.LENGTH(1)) shift_w14 (clk, rx_input[511:480], cur_w14);
+				else
+					shifter_32b #(.LENGTH(1)) shift_w14 (clk, HASHERS[i-2].new_w15, cur_w14);
+				
+				if(i == 0)
+					assign cur_w9 = rx_input[319:288];
+				else if(i < 5)
+					shifter_32b #(.LENGTH(i)) shift_w9 (clk, rx_input[`IDX(9+i)], cur_w9);
+				else
+					shifter_32b #(.LENGTH(5)) shift_w9 (clk, HASHERS[i-5].cur_w14, cur_w9);
+			end 
+			else // LOOP != 1, so we can't use the shift register-based code yet.
+			begin
+				wire[511:0] cur_w;
+				if(i == 0)
+					assign cur_w = feedback ? {new_w15, new_w14to0 } : rx_input;
+				else
+					assign cur_w = feedback ? {new_w15, new_w14to0 } : {HASHERS[i-1].new_w15, HASHERS[i-1].new_w14to0 };
+					
+				assign cur_w0 = cur_w[31:0];
+				assign cur_w1 = cur_w[63:32];
+				assign cur_w9 = cur_w[319:288];
+				assign cur_w14 = cur_w[479:448];
+				
+				always @ (posedge clk)
+					new_w14to0 <= cur_w[511:32];
+			end
 
 			if(i == 0)
 				sha256_digester U (
