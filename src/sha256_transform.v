@@ -34,7 +34,7 @@
 // for you instead if it's behaving itself properly, but that won't
 // save quite as many FPGA registers as doing it explicitly would.
 
-//`define USE_EXPLICIT_ALTSHIFT_FOR_W
+`define USE_EXPLICIT_ALTSHIFT_FOR_W
 
 // End of options.
 
@@ -102,11 +102,14 @@ module sha256_transform #(
 		for (i = 0; i < NUM_ROUNDS/LOOP; i = i + 1) begin : HASHERS
 			wire [31:0] new_w15;
 			wire [255:0] state;
-			wire [31:0] K;
+			wire [31:0] K, K_next;
+			wire [31:0] t1_part_next;
 `ifdef USE_RAM_FOR_KS
 			assign K = Ks_mem[LOOP*i+cnt];
+			assign K_next = Ks_mem[LOOP*i+cnt+1];
 `else
 			assign K = Ks[32*(63-LOOP*i-cnt) +: 32];
+			assign K_next = Ks[32*(63-LOOP*i-cnt-1) +: 32];
 `endif
 			wire [31:0] cur_w0, cur_w1, cur_w9, cur_w14;
 			reg [479:0] new_w14to0;
@@ -159,18 +162,22 @@ module sha256_transform #(
 			if(i == 0)
 				sha256_digester U (
 					.clk(clk),
-					.k(K),
+					.k_next(K_next),
 					.rx_state(feedback ? state : rx_state),
-					.rx_w0(cur_w0),
-					.tx_state(state)
+					.rx_t1_part(feedback ? t1_part_next : (rx_state[`IDX(7)] + cur_w0 + K)),
+					.rx_w1(cur_w1),
+					.tx_state(state),
+					.tx_t1_part(t1_part_next)
 				);
 			else
 				sha256_digester U (
 					.clk(clk),
-					.k(K),
+					.k_next(K_next),
 					.rx_state(feedback ? state : HASHERS[i-1].state),
-					.rx_w0(cur_w0),
-					.tx_state(state)
+					.rx_t1_part(feedback ? t1_part_next : HASHERS[i-1].t1_part_next),
+					.rx_w1(cur_w1),
+					.tx_state(state),
+					.tx_t1_part(t1_part_next)
 				);
 			sha256_update_w upd_w (
 				.clk(clk),
@@ -228,16 +235,17 @@ module sha256_update_w (clk, rx_w0, rx_w1, rx_w9, rx_w14, tx_w15);
 	
 endmodule
 
-module sha256_digester (clk, k, rx_state, rx_w0, 
-								tx_state);
+module sha256_digester (clk, k_next, rx_state, rx_t1_part, rx_w1, 
+								tx_state, tx_t1_part);
 
 	input clk;
-	input [31:0] k;
+	input [31:0] k_next;
 	input [255:0] rx_state;
-	input [31:0] rx_w0;
+	input [31:0] rx_t1_part;
+	input [31:0] rx_w1;
 
 	output reg [255:0] tx_state;
-
+	output reg [31:0] tx_t1_part;
 
 	wire [31:0] e0_w, e1_w, ch_w, maj_w;
 	
@@ -247,12 +255,14 @@ module sha256_digester (clk, k, rx_state, rx_w0,
 	ch	ch_blk	(rx_state[`IDX(4)], rx_state[`IDX(5)], rx_state[`IDX(6)], ch_w);
 	maj	maj_blk	(rx_state[`IDX(0)], rx_state[`IDX(1)], rx_state[`IDX(2)], maj_w);
 
-	wire [31:0] t1 = (rx_state[`IDX(7)]+ rx_w0 + k) + e1_w + ch_w ;
+	wire [31:0] t1 = rx_t1_part + e1_w + ch_w ;
 	wire [31:0] t2 = e0_w + maj_w;
 	
 
 	always @ (posedge clk)
 	begin
+		tx_t1_part <= (rx_state[`IDX(6)] + rx_w1 + k_next);
+	
 		tx_state[`IDX(7)] <= rx_state[`IDX(6)];
 		tx_state[`IDX(6)] <= rx_state[`IDX(5)];
 		tx_state[`IDX(5)] <= rx_state[`IDX(4)];
