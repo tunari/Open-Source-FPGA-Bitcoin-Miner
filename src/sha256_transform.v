@@ -162,11 +162,7 @@ module sha256_transform #(
 					.k(K),
 					.rx_state(feedback ? state : rx_state),
 					.rx_w0(cur_w0),
-					.rx_w1(cur_w1),
-					.rx_w9(cur_w9),
-					.rx_w14(cur_w14),
-					.tx_state(state),
-					.tx_w15(new_w15)
+					.tx_state(state)
 				);
 			else
 				sha256_digester U (
@@ -174,12 +170,16 @@ module sha256_transform #(
 					.k(K),
 					.rx_state(feedback ? state : HASHERS[i-1].state),
 					.rx_w0(cur_w0),
-					.rx_w1(cur_w1),
-					.rx_w9(cur_w9),
-					.rx_w14(cur_w14),
-					.tx_state(state),
-					.tx_w15(new_w15)
+					.tx_state(state)
 				);
+			sha256_update_w upd_w (
+				.clk(clk),
+				.rx_w0(cur_w0),
+				.rx_w1(cur_w1),
+				.rx_w9(cur_w9),
+				.rx_w14(cur_w14),
+				.tx_w15(new_w15)
+			);
 		end
 
 	endgenerate
@@ -213,38 +213,46 @@ module sha256_transform #(
 
 endmodule
 
+module sha256_update_w (clk, rx_w0, rx_w1, rx_w9, rx_w14, tx_w15);
+	input clk;
+	input [31:0] rx_w0, rx_w1, rx_w9, rx_w14;
+	output reg[31:0] tx_w15;
+	
+	wire [31:0] s0_w, s1_w;
+	s0	s0_blk	(rx_w1, s0_w);
+	s1	s1_blk	(rx_w14, s1_w);
 
-module sha256_digester (clk, k, rx_state, rx_w0, rx_w1, rx_w9, rx_w14,
-								tx_state, tx_w15);
+	wire [31:0] new_w = s1_w + rx_w9 + s0_w + rx_w0;
+	always @ (posedge clk)
+		tx_w15 <= new_w;
+	
+endmodule
+
+module sha256_digester (clk, k, rx_state, rx_w0, 
+								tx_state);
 
 	input clk;
 	input [31:0] k;
 	input [255:0] rx_state;
-	input [31:0] rx_w0, rx_w1, rx_w9, rx_w14;
+	input [31:0] rx_w0;
 
 	output reg [255:0] tx_state;
-	output reg[31:0] tx_w15;
 
 
-	wire [31:0] e0_w, e1_w, ch_w, maj_w, s0_w, s1_w;
+	wire [31:0] e0_w, e1_w, ch_w, maj_w;
 	
 	
 	e0	e0_blk	(rx_state[`IDX(0)], e0_w);
 	e1	e1_blk	(rx_state[`IDX(4)], e1_w);
 	ch	ch_blk	(rx_state[`IDX(4)], rx_state[`IDX(5)], rx_state[`IDX(6)], ch_w);
 	maj	maj_blk	(rx_state[`IDX(0)], rx_state[`IDX(1)], rx_state[`IDX(2)], maj_w);
-	s0	s0_blk	(rx_w1, s0_w);
-	s1	s1_blk	(rx_w14, s1_w);
 
 	wire [31:0] t1 = (rx_state[`IDX(7)]+ rx_w0 + k) + e1_w + ch_w ;
 	wire [31:0] t2 = e0_w + maj_w;
-	wire [31:0] new_w = s1_w + rx_w9 + s0_w + rx_w0;
 	
 
 	always @ (posedge clk)
 	begin
-		tx_w15 <= new_w;
-
 		tx_state[`IDX(7)] <= rx_state[`IDX(6)];
 		tx_state[`IDX(6)] <= rx_state[`IDX(5)];
 		tx_state[`IDX(5)] <= rx_state[`IDX(4)];
