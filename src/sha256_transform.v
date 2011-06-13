@@ -36,6 +36,20 @@
 
 `define USE_EXPLICIT_ALTSHIFT_FOR_W
 
+// Number of logic registers to add prior to and after explicit 
+// RAM-based shift registers in order to improve timings.
+// Set these to 1 if you've enabled USE_EXPLICIT_ALTSHIFT_FOR_W,
+// you have a decent amount of free resources, and the delays
+// to and from RAM are limiting your clock speed.
+// Maximum value for each is 1, minimum is 0.
+`ifndef RAMSHIFT_NUM_PRE_REGS
+`define RAMSHIFT_NUM_PRE_REGS 0
+`endif
+
+`ifndef RAMSHIFT_NUM_POST_REGS
+`define RAMSHIFT_NUM_POST_REGS 0
+`endif
+
 // End of options.
 
 
@@ -286,9 +300,53 @@ module shifter_32b #(
 
 	generate
 `ifdef USE_EXPLICIT_ALTSHIFT_FOR_W
-	if(LENGTH >= 4) begin
-		altshift_taps #(.number_of_taps(1), .tap_distance(LENGTH), .width(32)) shifttaps
-		( .clken(1), .aclr(0), .clock(clk), .shiftin(val_in), .taps(), .shiftout(val_out) ); 
+	if(LENGTH >= 5) begin
+		wire [31:0] shift_in, shift_out;
+		
+		if(`RAMSHIFT_NUM_PRE_REGS == 0)
+		begin
+			assign shift_in = val_in;
+		end
+		else
+		begin
+			for (i = 0; i < `RAMSHIFT_NUM_PRE_REGS; i = i + 1) begin : PREREGS
+				reg [31:0] r;
+				wire [31:0] prev; 
+					if(i == 0)
+						assign prev = val_in;
+					else
+						assign prev = PREREGS[i-1].r;
+				always @ (posedge clk)
+					r <= prev;
+			end
+			assign shift_in = PREREGS[`RAMSHIFT_NUM_PRE_REGS-1].r;
+		end
+
+		altshift_taps #(
+			.number_of_taps(1), 
+			.tap_distance(LENGTH-(`RAMSHIFT_NUM_PRE_REGS+`RAMSHIFT_NUM_POST_REGS)), 
+			.width(32)
+		) shifttaps
+		( .clken(1), .aclr(0), .clock(clk), .shiftin(shift_in), .taps(), .shiftout(shift_out) ); 
+
+		if(`RAMSHIFT_NUM_POST_REGS == 0)
+		begin
+			assign val_out = shift_out;
+		end
+		else
+		begin
+			for (i = 0; i < `RAMSHIFT_NUM_POST_REGS; i = i + 1) begin : POSTREGS
+				reg [31:0] r;
+				wire [31:0] prev; 
+					if(i == 0)
+						assign prev = shift_out;
+					else
+						assign prev = POSTREGS[i-1].r;
+				always @ (posedge clk)
+					r <= prev;
+			end
+			assign val_out = POSTREGS[`RAMSHIFT_NUM_POST_REGS-1].r;
+		end	
 	end else begin
 `endif
 
