@@ -282,30 +282,19 @@ module shifter_32b #(
 	input [31:0] val_in,
 	output [31:0] val_out
 );
-	genvar i;
-
-	generate
+generate
 `ifdef USE_EXPLICIT_ALTSHIFT_FOR_W
 	if(LENGTH >= 4) begin
 		altshift_taps #(.number_of_taps(1), .tap_distance(LENGTH), .width(32)) shifttaps
 		( .clken(1), .aclr(0), .clock(clk), .shiftin(val_in), .taps(), .shiftout(val_out) ); 
 	end else begin
 `endif
-
-		for (i = 0; i < LENGTH; i = i + 1) begin : TAPS
-			reg [31:0] r;
-			wire [31:0] prev; 
-				if(i == 0)
-					assign prev = val_in;
-				else
-					assign prev = TAPS[i-1].r;
-			always @ (posedge clk)
-				r <= prev;
-		end
-	
-	assign val_out = TAPS[LENGTH-1].r;
+		reg [32 * LENGTH - 1:0] r;
+		always @ (posedge clk)
+			r <= (r << 32) | val_in;
+		assign val_out = r[32 * LENGTH - 1:32 * (LENGTH - 1)];
 `ifdef USE_EXPLICIT_ALTSHIFT_FOR_W
 	end
 `endif
-	endgenerate
+endgenerate
 endmodule
