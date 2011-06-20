@@ -36,6 +36,11 @@
 
 `define USE_EXPLICIT_ALTSHIFT_FOR_W
 
+// Experimental untested option for Xilinx FPGAs to store W in BRAM-based
+// shift registers. Not for use on other FPGA platforms.
+
+//`define USE_XILINX_BRAM_FOR_W
+
 // End of options.
 
 
@@ -289,10 +294,27 @@ generate
 		( .clken(1), .aclr(0), .clock(clk), .shiftin(val_in), .taps(), .shiftout(val_out) ); 
 	end else begin
 `endif
+`ifdef USE_XILINX_BRAM_FOR_W
+	if(LENGTH >= 8) begin
+		reg [7:0] addr = 0;
+		reg [31:0] r; 
+		reg [31:0] m[0:(LENGTH-2)];
+		always @ (posedge clk)
+		begin
+			addr <= (addr + 1) % (LENGTH - 1);
+			r <= m[addr];
+			m[addr] <= val_in;
+		end
+		assign val_out = r;
+	end else begin
+`endif
 		reg [32 * LENGTH - 1:0] r;
 		always @ (posedge clk)
 			r <= (r << 32) | val_in;
 		assign val_out = r[32 * LENGTH - 1:32 * (LENGTH - 1)];
+`ifdef USE_XILINX_BRAM_FOR_W
+	end
+`endif
 `ifdef USE_EXPLICIT_ALTSHIFT_FOR_W
 	end
 `endif
