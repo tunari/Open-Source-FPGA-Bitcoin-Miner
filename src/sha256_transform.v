@@ -61,7 +61,8 @@
 // a full hash in 2 clock cycles. And so forth.
 module sha256_transform #(
 	parameter LOOP = 6'd4,
-	parameter NUM_ROUNDS = 64
+	parameter NUM_ROUNDS = 64,
+	parameter CONST_W_FLAGS = 0
 ) (
 	input clk,
 	input feedback,
@@ -128,7 +129,10 @@ module sha256_transform #(
 				if(i == 0)
 					assign cur_w1 = rx_input[63:32];
 				else if(i < 8)
-					shifter_32b #(.LENGTH(i)) shift_w1 (clk, rx_input[`IDX(1+i)], cur_w1);
+					if(CONST_W_FLAGS & (1 << (1+i)))
+						assign cur_w1 = rx_input[`IDX(1+i)];
+					else
+						shifter_32b #(.LENGTH(i)) shift_w1 (clk, rx_input[`IDX(1+i)], cur_w1);
 				else
 					shifter_32b #(.LENGTH(8)) shift_w1 (clk, HASHERS[i-8].cur_w9, cur_w1);
 				
@@ -143,7 +147,10 @@ module sha256_transform #(
 				if(i == 0)
 					assign cur_w9 = rx_input[319:288];
 				else if(i < 5)
-					shifter_32b #(.LENGTH(i)) shift_w9 (clk, rx_input[`IDX(9+i)], cur_w9);
+					if(CONST_W_FLAGS & (1 << (9+i)))
+						assign cur_w9 = rx_input[`IDX(9+i)];
+					else
+						shifter_32b #(.LENGTH(i)) shift_w9 (clk, rx_input[`IDX(9+i)], cur_w9);
 				else
 					shifter_32b #(.LENGTH(5)) shift_w9 (clk, HASHERS[i-5].cur_w14, cur_w9);
 			end 
@@ -225,6 +232,16 @@ module sha256_transform #(
 
 endmodule
 
+module adder_3to2_compressor (in_a, in_b, in_c, out_sum, out_carry);
+	input [31:0] in_a, in_b, in_c;
+	output [31:0] out_sum, out_carry;
+	wire [31:0] temp_carry;
+	
+	assign out_sum = in_a ^ in_b ^ in_c;
+	assign temp_carry = (in_a & in_b) | (in_a & in_c) | (in_b & in_c);
+	assign out_carry = { temp_carry[30:0], 1'b0 };
+endmodule
+
 module sha256_update_w (clk, rx_w0, rx_w1, rx_w9, rx_w14, tx_w15);
 	input clk;
 	input [31:0] rx_w0, rx_w1, rx_w9, rx_w14;
@@ -234,7 +251,10 @@ module sha256_update_w (clk, rx_w0, rx_w1, rx_w9, rx_w14, tx_w15);
 	s0	s0_blk	(rx_w1, s0_w);
 	s1	s1_blk	(rx_w14, s1_w);
 
-	wire [31:0] new_w = s1_w + rx_w9 + s0_w + rx_w0;
+	wire [31:0] sum_part, carry_part, sum_final, carry_final;
+	adder_3to2_compressor comp1(s1_w, rx_w9, rx_w0, sum_part, carry_part);
+	adder_3to2_compressor comp2(sum_part, carry_part, s0_w, sum_final, carry_final);
+	wire [31:0] new_w = sum_final + carry_final;
 	always @ (posedge clk)
 		tx_w15 <= new_w;
 	
