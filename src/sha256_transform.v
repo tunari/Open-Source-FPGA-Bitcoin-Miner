@@ -106,7 +106,7 @@ module sha256_transform #(
 	generate
 
 		for (i = 0; i < NUM_ROUNDS/LOOP; i = i + 1) begin : HASHERS
-			wire [31:0] new_w15;
+			wire [31:0] new_w15, new_w15_delay;
 			wire [255:0] state;
 			wire [31:0] K, K_next;
 			wire [31:0] t1_part_next;
@@ -134,15 +134,22 @@ module sha256_transform #(
 					else
 						shifter_32b #(.LENGTH(i)) shift_w1 (clk, rx_input[`IDX(1+i)], cur_w1);
 				else
-					shifter_32b #(.LENGTH(8)) shift_w1 (clk, HASHERS[i-8].cur_w9, cur_w1);
+					if((CONST_W_FLAGS >> (i-7)) & (1 << 9))
+						assign cur_w1 = HASHERS[i-8].cur_w9;
+					else
+						shifter_32b #(.LENGTH(8)) shift_w1 (clk, HASHERS[i-8].cur_w9, cur_w1);
 				
 				
 				if(i == 0)
 					assign cur_w14 = rx_input[479:448];
 				else if(i == 1)
-					shifter_32b #(.LENGTH(1)) shift_w14 (clk, rx_input[511:480], cur_w14);
+					if(CONST_W_FLAGS & (1 << 15))
+						assign cur_w14 = rx_input[511:480];
+					else
+						shifter_32b #(.LENGTH(1)) shift_w14 (clk, rx_input[511:480], cur_w14);
 				else
-					shifter_32b #(.LENGTH(1)) shift_w14 (clk, HASHERS[i-2].new_w15, cur_w14);
+					assign cur_w14 = HASHERS[i-2].new_w15_delay;
+					//shifter_32b #(.LENGTH(1)) shift_w14 (clk, HASHERS[i-2].new_w15, cur_w14);
 				
 				if(i == 0)
 					assign cur_w9 = rx_input[319:288];
@@ -152,7 +159,10 @@ module sha256_transform #(
 					else
 						shifter_32b #(.LENGTH(i)) shift_w9 (clk, rx_input[`IDX(9+i)], cur_w9);
 				else
-					shifter_32b #(.LENGTH(5)) shift_w9 (clk, HASHERS[i-5].cur_w14, cur_w9);
+					if((CONST_W_FLAGS >> (i-4)) & (1 << 14))
+						assign cur_w9 = HASHERS[i-5].cur_w14;
+					else
+						shifter_32b #(.LENGTH(5)) shift_w9 (clk, HASHERS[i-5].cur_w14, cur_w9);
 			end 
 			else // LOOP != 1, so we can't use the shift register-based code yet.
 			begin
@@ -197,7 +207,8 @@ module sha256_transform #(
 				.rx_w1(cur_w1),
 				.rx_w9(cur_w9),
 				.rx_w14(cur_w14),
-				.tx_w15(new_w15)
+				.tx_w15(new_w15),
+				.tx_w15_delay(new_w15_delay)
 			);
 		end
 
@@ -242,10 +253,10 @@ module adder_3to2_compressor (in_a, in_b, in_c, out_sum, out_carry);
 	assign out_carry = { temp_carry[30:0], 1'b0 };
 endmodule
 
-module sha256_update_w (clk, rx_w0, rx_w1, rx_w9, rx_w14, tx_w15);
+module sha256_update_w (clk, rx_w0, rx_w1, rx_w9, rx_w14, tx_w15, tx_w15_delay);
 	input clk;
 	input [31:0] rx_w0, rx_w1, rx_w9, rx_w14;
-	output reg[31:0] tx_w15;
+	output reg[31:0] tx_w15, tx_w15_delay;
 	
 	wire [31:0] s0_w, s1_w;
 	s0	s0_blk	(rx_w1, s0_w);
@@ -254,10 +265,16 @@ module sha256_update_w (clk, rx_w0, rx_w1, rx_w9, rx_w14, tx_w15);
 	wire [31:0] sum_part, carry_part, sum_final, carry_final;
 	adder_3to2_compressor comp1(s1_w, rx_w9, rx_w0, sum_part, carry_part);
 	adder_3to2_compressor comp2(sum_part, carry_part, s0_w, sum_final, carry_final);
-	wire [31:0] new_w = sum_final + carry_final;
-	always @ (posedge clk)
-		tx_w15 <= new_w;
 	
+	wire [31:0] new_w = sum_final + carry_final;
+	reg [31:0] sum_reg, carry_reg;
+	always @ (posedge clk)
+	begin
+		tx_w15 <= new_w;
+		sum_reg <= sum_final;
+		carry_reg <= carry_final;
+		tx_w15_delay <= sum_reg + carry_reg;
+	end
 endmodule
 
 module sha256_digester (clk, k_next, rx_state, rx_t1_part, rx_w1, 
