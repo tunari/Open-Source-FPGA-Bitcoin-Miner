@@ -62,7 +62,7 @@
 module sha256_transform #(
 	parameter LOOP = 6'd4,
 	parameter NUM_ROUNDS = 64,
-	parameter CONST_W_FLAGS = 0
+	parameter [63:0] CONST_W_FLAGS = 0
 ) (
 	input clk,
 	input feedback,

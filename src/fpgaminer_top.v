@@ -71,7 +71,7 @@ module fpgaminer_top (osc_clk);
 	reg [5:0] cnt = 6'd0;
 	reg feedback = 1'b0;
 
-	sha256_transform #(.LOOP(LOOP), .NUM_ROUNDS(64), .CONST_W_FLAGS(65520)) uut (
+	sha256_transform #(.LOOP(LOOP), .NUM_ROUNDS(64), .CONST_W_FLAGS(64'hfff0)) uut (
 		.clk(hash_clk),
 		.feedback(feedback),
 		.cnt(cnt),
@@ -79,7 +79,7 @@ module fpgaminer_top (osc_clk);
 		.rx_input({384'h000002800000000000000000000000000000000000000000000000000000000000000000000000000000000080000000, data}),
 		.tx_hash(hash)
 	);
-	sha256_transform #(.LOOP(LOOP), .NUM_ROUNDS(LOOP == 1 ? 61 : (LOOP == 2 ? 62 : 64)), .CONST_W_FLAGS(65280)) uut2 (
+	sha256_transform #(.LOOP(LOOP), .NUM_ROUNDS(LOOP == 1 ? 61 : (LOOP == 2 ? 62 : 64)), .CONST_W_FLAGS(64'hff00)) uut2 (
 		.clk(hash_clk),
 		.feedback(feedback),
 		.cnt(cnt),
