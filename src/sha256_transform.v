@@ -198,27 +198,24 @@ module sha256_transform #(
 
 	always @ (posedge clk)
 	begin
-		if (!feedback)
-		begin
-			if (NUM_ROUNDS == 64) begin
-				tx_hash[`IDX(0)] <= rx_state[`IDX(0)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(0)];
-				tx_hash[`IDX(1)] <= rx_state[`IDX(1)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(1)];
-				tx_hash[`IDX(2)] <= rx_state[`IDX(2)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(2)];
-				tx_hash[`IDX(3)] <= rx_state[`IDX(3)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(3)];
-				tx_hash[`IDX(4)] <= rx_state[`IDX(4)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(4)];
-				tx_hash[`IDX(5)] <= rx_state[`IDX(5)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(5)];
-				tx_hash[`IDX(6)] <= rx_state[`IDX(6)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(6)];
-				tx_hash[`IDX(7)] <= rx_state[`IDX(7)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(7)];
-			end else begin
-				tx_hash[`IDX(0)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(0)];
-				tx_hash[`IDX(1)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(1)];
-				tx_hash[`IDX(2)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(2)];
-				tx_hash[`IDX(3)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(3)];
-				tx_hash[`IDX(4)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(4)];
-				tx_hash[`IDX(5)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(5)];
-				tx_hash[`IDX(6)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(6)];
-				tx_hash[`IDX(7)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(7)];
-			end
+		if (NUM_ROUNDS == 64) begin
+			tx_hash[`IDX(0)] <= rx_state[`IDX(0)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(0)];
+			tx_hash[`IDX(1)] <= rx_state[`IDX(1)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(1)];
+			tx_hash[`IDX(2)] <= rx_state[`IDX(2)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(2)];
+			tx_hash[`IDX(3)] <= rx_state[`IDX(3)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(3)];
+			tx_hash[`IDX(4)] <= rx_state[`IDX(4)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(4)];
+			tx_hash[`IDX(5)] <= rx_state[`IDX(5)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(5)];
+			tx_hash[`IDX(6)] <= rx_state[`IDX(6)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(6)];
+			tx_hash[`IDX(7)] <= rx_state[`IDX(7)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(7)];
+		end else begin
+			tx_hash[`IDX(0)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(0)];
+			tx_hash[`IDX(1)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(1)];
+			tx_hash[`IDX(2)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(2)];
+			tx_hash[`IDX(3)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(3)];
+			tx_hash[`IDX(4)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(4)];
+			tx_hash[`IDX(5)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(5)];
+			tx_hash[`IDX(6)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(6)];
+			tx_hash[`IDX(7)] <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(7)];
 		end
 	end
 
