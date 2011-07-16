@@ -113,6 +113,8 @@ module sha256_transform #(
 			wire [255:0] state;
 			wire [31:0] K, K_next;
 			wire [31:0] t1_part_next;
+			wire feedback_r;
+			reg feedback_next;
 `ifdef USE_RAM_FOR_KS
 			assign K = Ks_mem[LOOP*cnt+i];
 			assign K_next = Ks_mem[LOOP*cnt+i+1];
@@ -122,32 +124,70 @@ module sha256_transform #(
 `endif
 			wire [31:0] cur_w0, cur_w1, cur_w9, cur_w14;
 			reg [479:0] new_w14to0;
-			if(LOOP == 1)
+			if(LOOP == 1 || LOOP == 2)
 			begin
 				if(i == 0)
-					assign cur_w0 = rx_input[31:0];
+					assign feedback_r = feedback;
+				else
+					assign feedback_r = HASHERS[i-1].feedback_next;
+				always @ (posedge clk)
+					feedback_next <= feedback_r;
+			
+				if(i == 0)
+				begin
+					wire [31:0] fb_w0;
+					shifter_32b #(.LENGTH(2)) shift_w0_fb (clk, HASHERS[NUM_ROUNDS/LOOP-1].cur_w1, fb_w0);
+					assign cur_w0 = feedback_r ? fb_w0 : rx_input[31:0];
+				end
 				else
 					shifter_32b #(.LENGTH(1)) shift_w0 (clk, HASHERS[i-1].cur_w1, cur_w0);
 				
 				if(i == 0)
-					assign cur_w1 = rx_input[63:32];
+				begin
+					wire [31:0] fb_w1;
+					shifter_32b #(.LENGTH(9)) shift_w1_fb (clk, HASHERS[NUM_ROUNDS/LOOP-8].cur_w9, fb_w1);
+					assign cur_w1 = feedback_r ? fb_w1 : rx_input[63:32];
+				end 
 				else if(i < 8)
-					shifter_32b #(.LENGTH(i)) shift_w1 (clk, rx_input[`IDX(1+i)], cur_w1);
+				begin
+					wire [31:0] fb_w1; wire[31:0] nonfb_w1;
+					shifter_32b #(.LENGTH(9)) shift_w1_fb (clk, HASHERS[NUM_ROUNDS/LOOP+i-8].cur_w9, fb_w1);
+					shifter_32b #(.LENGTH(i)) shift_w1 (clk, rx_input[`IDX(1+i)], nonfb_w1);
+					assign cur_w1 = feedback_r ? fb_w1 : nonfb_w1;
+				end
 				else
 					shifter_32b #(.LENGTH(8)) shift_w1 (clk, HASHERS[i-8].cur_w9, cur_w1);
 				
 				
 				if(i == 0)
-					assign cur_w14 = rx_input[479:448];
+				begin
+					wire [31:0] fb_w14;
+					shifter_32b #(.LENGTH(2)) shift_w14_fb (clk, HASHERS[NUM_ROUNDS/LOOP-2].new_w15, fb_w14);
+					assign cur_w14 = feedback_r ? fb_w14 : rx_input[479:448];
+				end
 				else if(i == 1)
-					shifter_32b #(.LENGTH(1)) shift_w14 (clk, rx_input[511:480], cur_w14);
+				begin
+					wire [31:0] fb_w14; wire [31:0] nonfb_w14;
+					shifter_32b #(.LENGTH(1)) shift_w14 (clk, rx_input[511:480], nonfb_w14);
+					shifter_32b #(.LENGTH(2)) shift_w14_fb (clk, HASHERS[NUM_ROUNDS/LOOP-1].new_w15, fb_w14);
+					assign cur_w14 = feedback_r ? fb_w14 : nonfb_w14;
+				end
 				else
 					shifter_32b #(.LENGTH(1)) shift_w14 (clk, HASHERS[i-2].new_w15, cur_w14);
 				
 				if(i == 0)
-					assign cur_w9 = rx_input[319:288];
+				begin
+					wire [31:0] fb_w9;
+					shifter_32b #(.LENGTH(6)) shift_w9_fb (clk, HASHERS[NUM_ROUNDS/LOOP-5].cur_w14, fb_w9);
+					assign cur_w9 = feedback_r ? fb_w9 : rx_input[319:288];
+				end
 				else if(i < 5)
-					shifter_32b #(.LENGTH(i)) shift_w9 (clk, rx_input[`IDX(9+i)], cur_w9);
+				begin
+					wire [31:0] fb_w9; wire [31:0] nonfb_w9;
+					shifter_32b #(.LENGTH(6)) shift_w9_fb (clk, HASHERS[NUM_ROUNDS/LOOP+i-5].cur_w14, fb_w9);
+					shifter_32b #(.LENGTH(i)) shift_w9 (clk, rx_input[`IDX(9+i)], nonfb_w9);
+					assign cur_w9 = feedback_r ? fb_w9 : nonfb_w9;
+				end
 				else
 					shifter_32b #(.LENGTH(5)) shift_w9 (clk, HASHERS[i-5].cur_w14, cur_w9);
 			end 
