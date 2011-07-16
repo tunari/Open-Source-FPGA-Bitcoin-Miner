@@ -124,7 +124,7 @@ module sha256_transform #(
 `endif
 			wire [31:0] cur_w0, cur_w1, cur_w9, cur_w14;
 			reg [479:0] new_w14to0;
-			if(LOOP == 1 || LOOP == 2)
+			if(LOOP <= 4)
 			begin
 				if(i == 0)
 					assign feedback_r = feedback;
