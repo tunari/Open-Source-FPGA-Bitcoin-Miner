@@ -92,6 +92,10 @@ module sha256_transform #(
 
 
 	genvar i;
+	
+	reg [255:0] state_fb;
+	reg [511:0] w_fb;
+	reg [31:0] t1_part_fb;
 		
 `ifdef USE_RAM_FOR_KS
 	wire [31:0] Ks_mem[0:63];
@@ -110,11 +114,11 @@ module sha256_transform #(
 			wire [31:0] K, K_next;
 			wire [31:0] t1_part_next;
 `ifdef USE_RAM_FOR_KS
-			assign K = Ks_mem[LOOP*i+cnt];
-			assign K_next = Ks_mem[LOOP*i+cnt+1];
+			assign K = Ks_mem[LOOP*cnt+i];
+			assign K_next = Ks_mem[LOOP*cnt+i+1];
 `else
-			assign K = Ks[32*(63-LOOP*i-cnt) +: 32];
-			assign K_next = Ks[32*(63-LOOP*i-cnt-1) +: 32];
+			assign K = Ks[32*(63-(NUM_ROUNDS/LOOP)*((cnt+64-i)&(LOOP-1))-i) +: 32];
+			assign K_next = Ks[32*(63-(NUM_ROUNDS/LOOP)*((cnt+64-i)&(LOOP-1))-i-1) +: 32];
 `endif
 			wire [31:0] cur_w0, cur_w1, cur_w9, cur_w14;
 			reg [479:0] new_w14to0;
@@ -151,9 +155,9 @@ module sha256_transform #(
 			begin
 				wire[511:0] cur_w;
 				if(i == 0)
-					assign cur_w = feedback ? {new_w15, new_w14to0 } : rx_input;
+					assign cur_w = feedback ? w_fb : rx_input;
 				else
-					assign cur_w = feedback ? {new_w15, new_w14to0 } : {HASHERS[i-1].new_w15, HASHERS[i-1].new_w14to0 };
+					assign cur_w = {HASHERS[i-1].new_w15, HASHERS[i-1].new_w14to0 };
 					
 				assign cur_w0 = cur_w[31:0];
 				assign cur_w1 = cur_w[63:32];
@@ -168,8 +172,8 @@ module sha256_transform #(
 				sha256_digester U (
 					.clk(clk),
 					.k_next(K_next),
-					.rx_state(feedback ? state : rx_state),
-					.rx_t1_part(feedback ? t1_part_next : (rx_state[`IDX(7)] + cur_w0 + K)),
+					.rx_state(feedback ? state_fb : rx_state),
+					.rx_t1_part(feedback ? t1_part_fb : (rx_state[`IDX(7)] + cur_w0 + K)),
 					.rx_w1(cur_w1),
 					.tx_state(state),
 					.tx_t1_part(t1_part_next)
@@ -178,8 +182,8 @@ module sha256_transform #(
 				sha256_digester U (
 					.clk(clk),
 					.k_next(K_next),
-					.rx_state(feedback ? state : HASHERS[i-1].state),
-					.rx_t1_part(feedback ? t1_part_next : HASHERS[i-1].t1_part_next),
+					.rx_state(HASHERS[i-1].state),
+					.rx_t1_part(HASHERS[i-1].t1_part_next),
 					.rx_w1(cur_w1),
 					.tx_state(state),
 					.tx_t1_part(t1_part_next)
@@ -198,6 +202,9 @@ module sha256_transform #(
 
 	always @ (posedge clk)
 	begin
+		state_fb <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state;
+		w_fb <= {HASHERS[NUM_ROUNDS/LOOP-6'd1].new_w15, HASHERS[NUM_ROUNDS/LOOP-6'd1].new_w14to0};
+		t1_part_fb <= HASHERS[NUM_ROUNDS/LOOP-6'd1].t1_part_next;
 		if (NUM_ROUNDS == 64) begin
 			tx_hash[`IDX(0)] <= rx_state[`IDX(0)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(0)];
 			tx_hash[`IDX(1)] <= rx_state[`IDX(1)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(1)];

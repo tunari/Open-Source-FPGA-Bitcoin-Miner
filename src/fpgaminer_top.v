@@ -46,7 +46,7 @@ module fpgaminer_top (osc_clk);
 	// hash. This is its offset from the nonce that gave rise to the valid
 	// hash (except when LOOP_LOG2 == 0 or 1, where the offset is 131 or
 	// 66 respectively).
-	localparam [31:0] GOLDEN_NONCE_OFFSET = (32'd1 << (7 - LOOP_LOG2));
+	localparam [31:0] GOLDEN_NONCE_OFFSET = (32'd1 << (7 - LOOP_LOG2)) + 32'd2;
 
 	input osc_clk;
 
@@ -80,10 +80,10 @@ module fpgaminer_top (osc_clk);
 		.rx_input({384'h000002800000000000000000000000000000000000000000000000000000000000000000000000000000000080000000, data}),
 		.tx_hash(hash)
 	);
-	sha256_transform #(.LOOP(LOOP), .NUM_ROUNDS(LOOP == 1 ? 61 : (LOOP == 2 ? 62 : 64))) uut2 (
+	sha256_transform #(.LOOP(LOOP), .NUM_ROUNDS(LOOP == 1 ? 61 : 64)) uut2 (
 		.clk(hash_clk),
-		.feedback(feedback_d1),
-		.cnt((cnt - 6'd1) & (LOOP-1)),
+		.feedback(feedback),
+		.cnt(cnt),
 		.rx_state(256'h5be0cd191f83d9ab9b05688c510e527fa54ff53a3c6ef372bb67ae856a09e667),
 		.rx_input({256'h0000010000000000000000000000000000000000000000000000000080000000, hash}),
 		.tx_hash(hash2)
@@ -157,23 +157,21 @@ module fpgaminer_top (osc_clk);
 		// Check to see if the last hash generated is valid.
 		if(LOOP == 1)
 			is_golden_ticket <= (hash2[159:128] + 32'h5be0cd19 == 32'h00000000);
-		else if(LOOP == 2)
-			is_golden_ticket <= (hash2[191:160] + 32'h5be0cd19 == 32'h00000000) && !feedback_d2;
 		else
-			is_golden_ticket <= (hash2[255:224] == 32'h00000000) && !feedback_d2;
+			is_golden_ticket <= (hash2[255:224] == 32'h00000000) && !feedback;
 		if(is_golden_ticket)
 		begin
 			// TODO: Find a more compact calculation for this
 			if (LOOP == 1)
 				golden_nonce <= nonce - 32'd128;
 			else if (LOOP == 2)
-				golden_nonce <= nonce - 32'd64;
+				golden_nonce <= nonce - 32'd66;
 			else
 				golden_nonce <= nonce - GOLDEN_NONCE_OFFSET;
 		end
 `ifdef SIM
-		if (!feedback_d2)
-			$display ("nonce: %8x\nhash2: %64x\n", nonce, hash2);
+		if (!feedback)
+			$display ("nonce: %8x\nhah: %64x\nhash2: %64x\n", nonce, hash, hash2);
 `endif
 	end
 
