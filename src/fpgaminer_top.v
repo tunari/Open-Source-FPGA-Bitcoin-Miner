@@ -40,8 +40,20 @@ module fpgaminer_top (osc_clk);
 	parameter LOOP_LOG2 = 0;
 `endif
 
+	// Setting this parameter to 1 adds an extra precomputation stage to 
+	// the start of the pipeline, and setting it to 0 disables this.
+	// Ignored if LOOP_LOG2 != 0
+	//
+	// Valid values: 0 and 1
+`ifdef CONFIG_EXTRA_PRESTAGE
+	parameter EXTRA_PRESTAGE = `CONFIG_EXTRA_PRESTAGE;
+`else
+	parameter EXTRA_PRESTAGE = 1;
+`endif
+
 	// No need to adjust these parameters
 	localparam [5:0] LOOP = (6'd1 << LOOP_LOG2);
+	localparam REAL_EXTRA_PRESTAGE = EXTRA_PRESTAGE && (LOOP == 1) ? 1 : 0;
 	// The nonce will always be larger at the time we discover a valid
 	// hash. This is its offset from the nonce that gave rise to the valid
 	// hash (except when LOOP_LOG2 == 0 or 1, where the offset is 131 or
@@ -71,7 +83,11 @@ module fpgaminer_top (osc_clk);
 	reg [5:0] cnt = 6'd0;
 	reg feedback = 1'b0;
 
-	sha256_transform #(.LOOP(LOOP), .NUM_ROUNDS(64)) uut (
+	sha256_transform #(
+		.LOOP(LOOP), 
+		.NUM_ROUNDS(64), 
+		.EXTRA_PRESTAGE(REAL_EXTRA_PRESTAGE)
+	) uut (
 		.clk(hash_clk),
 		.feedback(feedback),
 		.cnt(cnt),
@@ -79,7 +95,10 @@ module fpgaminer_top (osc_clk);
 		.rx_input({384'h000002800000000000000000000000000000000000000000000000000000000000000000000000000000000080000000, data}),
 		.tx_hash(hash)
 	);
-	sha256_transform #(.LOOP(LOOP), .NUM_ROUNDS(LOOP == 1 ? 61 : (LOOP == 2 ? 62 : 64))) uut2 (
+	sha256_transform #(.LOOP(LOOP),
+		.NUM_ROUNDS(LOOP == 1 ? 61 : (LOOP == 2 ? 62 : 64)),
+		.EXTRA_PRESTAGE(REAL_EXTRA_PRESTAGE)		
+	) uut2 (
 		.clk(hash_clk),
 		.feedback(feedback),
 		.cnt(cnt),
@@ -163,7 +182,7 @@ module fpgaminer_top (osc_clk);
 		begin
 			// TODO: Find a more compact calculation for this
 			if (LOOP == 1)
-				golden_nonce <= nonce - 32'd128;
+				golden_nonce <= nonce - 32'd128 - REAL_EXTRA_PRESTAGE*2;
 			else if (LOOP == 2)
 				golden_nonce <= nonce - 32'd65;
 			else

@@ -61,7 +61,8 @@
 // a full hash in 2 clock cycles. And so forth.
 module sha256_transform #(
 	parameter LOOP = 6'd4,
-	parameter NUM_ROUNDS = 64
+	parameter NUM_ROUNDS = 64,
+	parameter EXTRA_PRESTAGE = 1
 ) (
 	input clk,
 	input feedback,
@@ -121,29 +122,41 @@ module sha256_transform #(
 			if(LOOP == 1)
 			begin
 				if(i == 0)
-					assign cur_w0 = rx_input[31:0];
+					if(EXTRA_PRESTAGE)
+						shifter_32b #(.LENGTH(1)) shift_w0 (clk, rx_input[31:0], cur_w0);
+					else
+						assign cur_w0 = rx_input[31:0];
 				else
 					shifter_32b #(.LENGTH(1)) shift_w0 (clk, HASHERS[i-1].cur_w1, cur_w0);
 				
 				if(i == 0)
-					assign cur_w1 = rx_input[63:32];
+					if(EXTRA_PRESTAGE)
+						shifter_32b #(.LENGTH(1)) shift_w1 (clk, rx_input[63:32], cur_w1);					
+					else
+						assign cur_w1 = rx_input[63:32];
 				else if(i < 8)
-					shifter_32b #(.LENGTH(i)) shift_w1 (clk, rx_input[`IDX(1+i)], cur_w1);
+					shifter_32b #(.LENGTH(i+EXTRA_PRESTAGE)) shift_w1 (clk, rx_input[`IDX(1+i)], cur_w1);
 				else
 					shifter_32b #(.LENGTH(8)) shift_w1 (clk, HASHERS[i-8].cur_w9, cur_w1);
 				
 				
 				if(i == 0)
-					assign cur_w14 = rx_input[479:448];
+					if(EXTRA_PRESTAGE)
+						shifter_32b #(.LENGTH(1)) shift_w14 (clk, rx_input[479:448], cur_w14);
+					else
+						assign cur_w14 = rx_input[479:448];
 				else if(i == 1)
-					shifter_32b #(.LENGTH(1)) shift_w14 (clk, rx_input[511:480], cur_w14);
+					shifter_32b #(.LENGTH(1+EXTRA_PRESTAGE)) shift_w14 (clk, rx_input[511:480], cur_w14);
 				else
 					shifter_32b #(.LENGTH(1)) shift_w14 (clk, HASHERS[i-2].new_w15, cur_w14);
 				
 				if(i == 0)
-					assign cur_w9 = rx_input[319:288];
+					if(EXTRA_PRESTAGE)
+						shifter_32b #(.LENGTH(1)) shift_w9 (clk, rx_input[319:288], cur_w9);
+					else
+						assign cur_w9 = rx_input[319:288];						
 				else if(i < 5)
-					shifter_32b #(.LENGTH(i)) shift_w9 (clk, rx_input[`IDX(9+i)], cur_w9);
+					shifter_32b #(.LENGTH(i+EXTRA_PRESTAGE)) shift_w9 (clk, rx_input[`IDX(9+i)], cur_w9);
 				else
 					shifter_32b #(.LENGTH(5)) shift_w9 (clk, HASHERS[i-5].cur_w14, cur_w9);
 			end 
@@ -151,7 +164,15 @@ module sha256_transform #(
 			begin
 				wire[511:0] cur_w;
 				if(i == 0)
-					assign cur_w = feedback ? {new_w15, new_w14to0 } : rx_input;
+					if(EXTRA_PRESTAGE)
+					begin
+						reg[511:0] first_w;
+						always @ (posedge clk)
+							first_w <= rx_input;
+						assign cur_w = feedback ? {new_w15, new_w14to0 } : first_w;
+					end
+					else
+						assign cur_w = feedback ? {new_w15, new_w14to0 } : rx_input;
 				else
 					assign cur_w = feedback ? {new_w15, new_w14to0 } : {HASHERS[i-1].new_w15, HASHERS[i-1].new_w14to0 };
 					
@@ -163,13 +184,29 @@ module sha256_transform #(
 				always @ (posedge clk)
 					new_w14to0 <= cur_w[511:32];
 			end
+			
+			wire [255:0] first_state; wire [31:0] first_t1_part;
+			if(EXTRA_PRESTAGE)
+			begin
+				reg [255:0] state_d1; reg [31:0] t1_part_d1;
+				assign first_state = state_d1;
+				assign first_t1_part = t1_part_d1;
+				always @ (posedge clk)
+				begin
+					state_d1 <= rx_state;
+					t1_part_d1 <= (rx_state[`IDX(7)] + rx_input[31:0] + K);
+				end
+			end else begin
+				assign first_state = rx_state;
+				assign first_t1_part = (rx_state[`IDX(7)] + cur_w0 + K);
+			end
 
 			if(i == 0)
 				sha256_digester U (
 					.clk(clk),
 					.k_next(K_next),
-					.rx_state(feedback ? state : rx_state),
-					.rx_t1_part(feedback ? t1_part_next : (rx_state[`IDX(7)] + cur_w0 + K)),
+					.rx_state(feedback ? state : first_state),
+					.rx_t1_part(feedback ? t1_part_next : first_t1_part),
 					.rx_w1(cur_w1),
 					.tx_state(state),
 					.tx_t1_part(t1_part_next)
