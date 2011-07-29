@@ -103,11 +103,8 @@ module sha256_transform #(
 			wire [31:0] K_tbl[0:LOOP-1];
 			wire [31:0] K_next_tbl[0:LOOP-1];
 			for (j = 0; j < LOOP; j = j + 1) begin : K_NEXT_TBL_INIT
-				localparam k_idx = (NUM_ROUNDS/LOOP)*((j+64-i)&(LOOP-1))+i+1;
-				if(k_idx < 0 || k_idx >= 64)
-					assign K_next_tbl[j] = 0;
-				else
-					assign K_next_tbl[j] = Ks[32*(63-k_idx) +: 32];
+				localparam k_next_idx = ((NUM_ROUNDS/LOOP)*((j+64-i)&(LOOP-1))+i+1)&63;
+				assign K_next_tbl[j] = Ks[32*(63-k_next_idx) +: 32];
 				assign K_tbl[j] = Ks[32*(63-(NUM_ROUNDS/LOOP)*((j+64-i)&(LOOP-1))-i) +: 32];
 			end
 			assign K = K_tbl[cnt&(LOOP-1)];
@@ -116,7 +113,7 @@ module sha256_transform #(
 			wire [31:0] cur_w0, cur_w1, cur_w9, cur_w14;
 			reg [479:0] new_w14to0;
 			if(LOOP <= 4)
-			begin
+			begin 
 				if(i == 0)
 					assign feedback_r = feedback;
 				else
@@ -182,7 +179,7 @@ module sha256_transform #(
 				else
 					shifter_32b #(.LENGTH(5)) shift_w9 (clk, HASHERS[i-5].cur_w14, cur_w9);
 			end 
-			else // LOOP != 1, so we can't use the shift register-based code yet.
+			else // LOOP is too high for us to use the shift register-based code.
 			begin
 				wire[511:0] cur_w;
 				if(i == 0)
@@ -326,7 +323,7 @@ generate
 `ifdef USE_EXPLICIT_ALTSHIFT_FOR_W
 	if(LENGTH >= 4) begin
 		altshift_taps #(.number_of_taps(1), .tap_distance(LENGTH), .width(32)) shifttaps
-		( .clken(1), .aclr(0), .clock(clk), .shiftin(val_in), .taps(), .shiftout(val_out) ); 
+		( .clken(1'b1), .aclr(1'b0), .clock(clk), .shiftin(val_in), .taps(), .shiftout(val_out) ); 
 	end else begin
 `endif
 `ifdef USE_XILINX_BRAM_FOR_W
