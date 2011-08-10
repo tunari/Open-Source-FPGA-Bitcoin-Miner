@@ -82,8 +82,8 @@ module fpgaminer_top (osc_clk);
 	);
 	sha256_transform #(.LOOP(LOOP), .NUM_ROUNDS(LOOP == 1 ? 61 : 64)) uut2 (
 		.clk(hash_clk),
-		.feedback(feedback),
-		.cnt(cnt),
+		.feedback(feedback_d1),
+		.cnt(cnt-1),
 		.rx_state(256'h5be0cd191f83d9ab9b05688c510e527fa54ff53a3c6ef372bb67ae856a09e667),
 		.rx_input({256'h0000010000000000000000000000000000000000000000000000000080000000, hash}),
 		.tx_hash(hash2)
@@ -158,19 +158,19 @@ module fpgaminer_top (osc_clk);
 		if(LOOP == 1)
 			is_golden_ticket <= (hash2[159:128] + 32'h5be0cd19 == 32'h00000000);
 		else
-			is_golden_ticket <= (hash2[255:224] == 32'h00000000) && !feedback;
+			is_golden_ticket <= (hash2[255:224] == 32'h00000000) && !feedback_d2;
 		if(is_golden_ticket)
 		begin
 			// TODO: Find a more compact calculation for this
 			if (LOOP == 1)
-				golden_nonce <= nonce - 32'd128;
+				golden_nonce <= nonce - 32'd130;
 			else if (LOOP == 2)
-				golden_nonce <= nonce - 32'd66;
+				golden_nonce <= nonce - 32'd67;
 			else
 				golden_nonce <= nonce - GOLDEN_NONCE_OFFSET;
 		end
 `ifdef SIM
-		if (!feedback)
+		if (!feedback_d2)
 			$display ("nonce: %8x\nhah: %64x\nhash2: %64x\n", nonce, hash, hash2);
 `endif
 	end

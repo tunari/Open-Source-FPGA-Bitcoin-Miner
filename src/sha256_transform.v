@@ -86,33 +86,42 @@ module sha256_transform #(
 
 	genvar i, j;
 	
-	reg [255:0] state_fb;
-	reg [511:0] w_fb;
-	reg [31:0] t1_part_fb;
+	wire [255:0] state_fb;
+	wire [511:0] w_fb;
+	wire [31:0] t1_part_fb;
+
+	reg [255:0] state_first;
+	reg [511:0] rx_input_d;
+	reg [31:0] t1_part_first;
 	
 	wire [31:0] K_0;
 	assign K_0 = Ks[32*63 +: 32];
 		
 	generate
+		always @ (posedge clk)
+		begin
+			state_first <= feedback ? state_fb : rx_state;
+			rx_input_d <= rx_input;
+			t1_part_first <= feedback ? t1_part_fb : (rx_state[`IDX(7)] + rx_input[31:0] + K_0);
+			
+		end
 
 		for (i = 0; i < NUM_ROUNDS/LOOP; i = i + 1) begin : HASHERS
 			wire [31:0] new_w15;
 			wire [255:0] state;
 			wire [31:0] K_next;
 			wire [31:0] t1_part_next;
-			wire feedback_r;
-			reg feedback_next;
+			reg feedback_r;
 			
-			wire[5:0] cur_cnt;
-			reg [5:0] cnt_d;
+			reg [5:0] cur_cnt;
+				
 			
 			if(i == 0)
-				assign cur_cnt = cnt;
+				always @ (posedge clk)
+					cur_cnt <= cnt;
 			else
-				assign cur_cnt = HASHERS[i-1].cnt_d;
-				
-			always @ (posedge clk)
-				cnt_d <= cur_cnt;
+				always @ (posedge clk)
+					cur_cnt <= HASHERS[i-1].cur_cnt;
 
 			wire [31:0] K_next_tbl[0:LOOP-1];
 			for (j = 0; j < LOOP; j = j + 1) begin : K_NEXT_TBL_INIT
@@ -125,14 +134,16 @@ module sha256_transform #(
 			reg [479:0] new_w14to0;
 			if(LOOP <= 4)
 			begin
+				
 				if(LOOP == 1)
-					assign feedback_r = 1'b0;
+					always @ (posedge clk)
+						feedback_r <= 1'b0;
 				else if(i == 0)
-					assign feedback_r = feedback;
+					always @ (posedge clk)
+						feedback_r <= feedback;
 				else
-					assign feedback_r = HASHERS[i-1].feedback_next;
-				always @ (posedge clk)
-					feedback_next <= feedback_r;
+					always @ (posedge clk)
+						feedback_r <= HASHERS[i-1].feedback_r;
 			
 				if(i == 0)
 				begin
@@ -140,9 +151,9 @@ module sha256_transform #(
 					if(LOOP != 1)
 						shifter_32b #(.LENGTH(2)) shift_w0_fb (clk, HASHERS[NUM_ROUNDS/LOOP-1].cur_w1, fb_w0);
 					if(LOOP == 1)
-						assign cur_w0 = rx_input[31:0];
+						assign cur_w0 = rx_input_d[31:0];
 					else
-						assign cur_w0 = feedback_r ? fb_w0 : rx_input[31:0];
+						assign cur_w0 = feedback_r ? fb_w0 : rx_input_d[31:0];
 				end
 				else
 					shifter_32b #(.LENGTH(1)) shift_w0 (clk, HASHERS[i-1].cur_w1, cur_w0);
@@ -153,16 +164,16 @@ module sha256_transform #(
 					if(LOOP != 1)
 						shifter_32b #(.LENGTH(9)) shift_w1_fb (clk, HASHERS[NUM_ROUNDS/LOOP-8].cur_w9, fb_w1);
 					if(LOOP == 1)
-						assign cur_w1 = rx_input[63:32];
+						assign cur_w1 = rx_input_d[63:32];
 					else
-						assign cur_w1 = feedback_r ? fb_w1 : rx_input[63:32];
+						assign cur_w1 = feedback_r ? fb_w1 : rx_input_d[63:32];
 				end 
 				else if(i < 8)
 				begin
 					wire [31:0] fb_w1; wire[31:0] nonfb_w1;
 					if(LOOP != 1)
 						shifter_32b #(.LENGTH(9)) shift_w1_fb (clk, HASHERS[NUM_ROUNDS/LOOP+i-8].cur_w9, fb_w1);
-					shifter_32b #(.LENGTH(i)) shift_w1 (clk, rx_input[`IDX(1+i)], nonfb_w1);
+					shifter_32b #(.LENGTH(i)) shift_w1 (clk, rx_input_d[`IDX(1+i)], nonfb_w1);
 					if(LOOP == 1)
 						assign cur_w1 = nonfb_w1;
 					else
@@ -178,14 +189,14 @@ module sha256_transform #(
 					if(LOOP != 1)
 						shifter_32b #(.LENGTH(2)) shift_w14_fb (clk, HASHERS[NUM_ROUNDS/LOOP-2].new_w15, fb_w14);
 					if(LOOP == 1)
-						assign cur_w14 = rx_input[479:448];
+						assign cur_w14 = rx_input_d[479:448];
 					else
-						assign cur_w14 = feedback_r ? fb_w14 : rx_input[479:448];
+						assign cur_w14 = feedback_r ? fb_w14 : rx_input_d[479:448];
 				end
 				else if(i == 1)
 				begin
 					wire [31:0] fb_w14; wire [31:0] nonfb_w14;
-					shifter_32b #(.LENGTH(1)) shift_w14 (clk, rx_input[511:480], nonfb_w14);
+					shifter_32b #(.LENGTH(1)) shift_w14 (clk, rx_input_d[511:480], nonfb_w14);
 					if(LOOP != 1)
 						shifter_32b #(.LENGTH(2)) shift_w14_fb (clk, HASHERS[NUM_ROUNDS/LOOP-1].new_w15, fb_w14);
 					if(LOOP == 1)
@@ -202,16 +213,16 @@ module sha256_transform #(
 					if(LOOP != 1)
 						shifter_32b #(.LENGTH(6)) shift_w9_fb (clk, HASHERS[NUM_ROUNDS/LOOP-5].cur_w14, fb_w9);
 					if(LOOP == 1)
-						assign cur_w9 = rx_input[319:288];
+						assign cur_w9 = rx_input_d[319:288];
 					else
-						assign cur_w9 = feedback_r ? fb_w9 : rx_input[319:288];
+						assign cur_w9 = feedback_r ? fb_w9 : rx_input_d[319:288];
 				end
 				else if(i < 5)
 				begin
 					wire [31:0] fb_w9; wire [31:0] nonfb_w9;
 					if(LOOP != 1)
 						shifter_32b #(.LENGTH(6)) shift_w9_fb (clk, HASHERS[NUM_ROUNDS/LOOP+i-5].cur_w14, fb_w9);
-					shifter_32b #(.LENGTH(i)) shift_w9 (clk, rx_input[`IDX(9+i)], nonfb_w9);
+					shifter_32b #(.LENGTH(i)) shift_w9 (clk, rx_input_d[`IDX(9+i)], nonfb_w9);
 					if(LOOP == 1)
 						assign cur_w9 = nonfb_w9;
 					else
@@ -224,7 +235,12 @@ module sha256_transform #(
 			begin
 				wire[511:0] cur_w;
 				if(i == 0)
-					assign cur_w = feedback ? w_fb : rx_input;
+				begin
+					reg [511:0] w_reg;
+					always @ (posedge clk)
+						w_reg <= feedback ? w_fb : rx_input;
+					assign cur_w = w_reg;
+				end
 				else
 					assign cur_w = {HASHERS[i-1].new_w15, HASHERS[i-1].new_w14to0 };
 					
@@ -241,8 +257,8 @@ module sha256_transform #(
 				sha256_digester U (
 					.clk(clk),
 					.k_next(K_next),
-					.rx_state(feedback ? state_fb : rx_state),
-					.rx_t1_part(feedback ? t1_part_fb : (rx_state[`IDX(7)] + rx_input[31:0] + K_0)),
+					.rx_state(state_first),
+					.rx_t1_part(t1_part_first),
 					.rx_w1(cur_w1),
 					.tx_state(state),
 					.tx_t1_part(t1_part_next)
@@ -267,15 +283,15 @@ module sha256_transform #(
 			);
 		end
 
+		if (LOOP != 1) begin
+			assign state_fb = HASHERS[NUM_ROUNDS/LOOP-6'd1].state;
+			assign w_fb = {HASHERS[NUM_ROUNDS/LOOP-6'd1].new_w15, HASHERS[NUM_ROUNDS/LOOP-6'd1].new_w14to0};
+			assign t1_part_fb = HASHERS[NUM_ROUNDS/LOOP-6'd1].t1_part_next;
+		end
 	endgenerate
-
+		
 	always @ (posedge clk)
 	begin
-		if (LOOP != 1) begin
-			state_fb <= HASHERS[NUM_ROUNDS/LOOP-6'd1].state;
-			w_fb <= {HASHERS[NUM_ROUNDS/LOOP-6'd1].new_w15, HASHERS[NUM_ROUNDS/LOOP-6'd1].new_w14to0};
-			t1_part_fb <= HASHERS[NUM_ROUNDS/LOOP-6'd1].t1_part_next;
-		end
 		if (NUM_ROUNDS == 64) begin
 			tx_hash[`IDX(0)] <= rx_state[`IDX(0)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(0)];
 			tx_hash[`IDX(1)] <= rx_state[`IDX(1)] + HASHERS[NUM_ROUNDS/LOOP-6'd1].state[`IDX(1)];
